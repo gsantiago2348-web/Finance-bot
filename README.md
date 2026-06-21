@@ -16,13 +16,14 @@ INSERT INTO usuarios (telefone, nome, limite_mensal)
 VALUES ('5511999999999', 'Nome da pessoa', 3000);
 ```
 
-## Etapa 1 (atual)
+## Etapa 1, 2 e 3 (atual)
 
 - ✅ Webhook recebendo mensagens da Z-API
 - ✅ Extração por regex (gratuita) — já preparada para trocar por IA depois
 - ✅ Multi-usuário com isolamento de dados por telefone
-- ✅ Comandos: `resumo hoje`, `resumo mes`, `limite 3000`, `editar último...`, `ajuda`
-- ⏳ Relatório PDF mensal (próxima etapa)
+- ✅ Comandos: `resumo hoje`, `resumo mes`, `relatorio`, `limite 3000`, `editar último...`, `ajuda`
+- ✅ Relatório PDF sob demanda (`relatorio` ou `relatorio MM/AAAA`)
+- ✅ Relatório PDF automático no último dia de cada mês, enviado a todos os usuários ativos
 
 ## Como rodar localmente
 

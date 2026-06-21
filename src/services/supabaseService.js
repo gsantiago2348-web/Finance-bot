@@ -121,3 +121,38 @@ export async function definirLimiteUsuario(telefone, limite) {
   if (error) throw error;
   return data;
 }
+
+export async function listarUsuariosAtivos() {
+  const { data, error } = await supabase
+    .from('usuarios')
+    .select('*')
+    .eq('ativo', true);
+
+  if (error) throw error;
+  return data;
+}
+
+// --- Controle de envio automático mensal ---
+// Evita reenviar o mesmo relatório duas vezes (ex: se o cron rodar mais
+// de uma vez no mesmo dia por algum reinício do servidor).
+
+export async function relatorioJaEnviado(telefone, ano, mes) {
+  const { data, error } = await supabase
+    .from('relatorios_enviados')
+    .select('id')
+    .eq('telefone', telefone)
+    .eq('ano', ano)
+    .eq('mes', mes)
+    .maybeSingle();
+
+  if (error) throw error;
+  return !!data;
+}
+
+export async function marcarRelatorioEnviado(telefone, ano, mes, totalGasto) {
+  const { error } = await supabase
+    .from('relatorios_enviados')
+    .insert([{ telefone, ano, mes, total_gasto: totalGasto }]);
+
+  if (error) throw error;
+}

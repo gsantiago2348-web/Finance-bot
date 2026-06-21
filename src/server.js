@@ -9,9 +9,11 @@
 
 import 'dotenv/config';
 import express from 'express';
+import cron from 'node-cron';
 import { processarMensagem } from './handlers/messageHandler.js';
 import { enviarMensagem, enviarDocumentoPDF } from './services/zapService.js';
 import { buscarUsuario } from './services/supabaseService.js';
+import { executarEnvioMensalSeNecessario } from './jobs/monthlyReport.js';
 
 const app = express();
 app.use(express.json());
@@ -71,4 +73,15 @@ app.post('/webhook', async (req, res) => {
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Finance Bot rodando na porta ${PORT}`);
+});
+
+// Roda todo dia às 20h (horário de São Paulo). O job em si verifica se
+// hoje é o último dia do mês antes de fazer qualquer envio — então na
+// prática só dispara o relatório de verdade uma vez por mês.
+cron.schedule('0 20 * * *', () => {
+  executarEnvioMensalSeNecessario().catch((err) => {
+    console.error('[relatorio-mensal] Erro inesperado no cron:', err);
+  });
+}, {
+  timezone: 'America/Sao_Paulo'
 });
