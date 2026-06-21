@@ -10,7 +10,7 @@
 import 'dotenv/config';
 import express from 'express';
 import { processarMensagem } from './handlers/messageHandler.js';
-import { enviarMensagem } from './services/zapService.js';
+import { enviarMensagem, enviarDocumentoPDF } from './services/zapService.js';
 import { buscarUsuario } from './services/supabaseService.js';
 
 const app = express();
@@ -48,7 +48,13 @@ app.post('/webhook', async (req, res) => {
     }
 
     const resposta = await processarMensagem(texto, usuario);
-    await enviarMensagem(telefoneRemetente, resposta);
+
+    if (resposta.tipo === 'pdf') {
+      await enviarMensagem(telefoneRemetente, resposta.texto);
+      await enviarDocumentoPDF(telefoneRemetente, resposta.pdfBuffer, resposta.nomeArquivo);
+    } else {
+      await enviarMensagem(telefoneRemetente, resposta.texto);
+    }
   } catch (err) {
     console.error('Erro ao processar webhook:', err);
     try {

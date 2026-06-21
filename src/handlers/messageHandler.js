@@ -18,6 +18,8 @@ import {
 } from '../services/supabaseService.js';
 import { formatarMoeda, formatarDataBR, formatarHora, somarGastos, agruparPorCategoria } from '../utils/formatadores.js';
 import { listarCategorias } from '../utils/categorias.js';
+import { gerarRelatorioPDF } from '../utils/pdfGenerator.js';
+import { enviarDocumentoPDF } from '../services/zapService.js';
 
 const MENSAGEM_AJUDA = `🤖 *Comandos disponíveis:*
 
@@ -26,34 +28,45 @@ _"mercado 50"_ ou _"corte de cabelo 35"_
 
 📊 *resumo hoje* — gastos de hoje
 📊 *resumo mes* — gastos do mês atual
+📄 *relatorio* — gera o PDF do mês atual
+📄 *relatorio 05/2026* — gera o PDF de um mês específico
 💰 *limite 3000* — define seu limite mensal
 ✏️ *editar último [campo] [valor]* — corrige o último gasto
 ❓ *ajuda* — mostra esta mensagem`;
 
-// `usuario` é o registro vindo da tabela `usuarios` (já validado como autorizado e ativo)
+// `usuario` é o registro vindo da tabela `usuarios` (já validado como autorizado e ativo).
+//
+// Retorna sempre um objeto { tipo, ... }:
+//   { tipo: 'texto', texto }
+//   { tipo: 'pdf', texto, pdfBuffer, nomeArquivo }
+// O chamador (server.js) decide como enviar cada tipo pelo WhatsApp.
 export async function processarMensagem(texto, usuario) {
   const textoLimpo = texto.trim();
   const textoLower = textoLimpo.toLowerCase();
   const telefone = usuario.telefone;
 
   if (textoLower === 'ajuda' || textoLower === 'help') {
-    return MENSAGEM_AJUDA;
+    return { tipo: 'texto', texto: MENSAGEM_AJUDA };
   }
 
   if (textoLower === 'resumo hoje') {
-    return await gerarResumoHoje(telefone);
+    return { tipo: 'texto', texto: await gerarResumoHoje(telefone) };
   }
 
   if (textoLower === 'resumo mes' || textoLower === 'resumo mês') {
-    return await gerarResumoMes(usuario);
+    return { tipo: 'texto', texto: await gerarResumoMes(usuario) };
+  }
+
+  if (textoLower === 'relatorio' || textoLower === 'relatório' || textoLower.startsWith('relatorio ') || textoLower.startsWith('relatório ')) {
+    return await gerarRelatorioComando(textoLimpo, usuario);
   }
 
   if (textoLower.startsWith('limite ')) {
-    return await definirLimite(textoLower, telefone);
+    return { tipo: 'texto', texto: await definirLimite(textoLower, telefone) };
   }
 
   if (textoLower.startsWith('editar')) {
-    return await editarUltimoGasto(textoLimpo, telefone);
+    return { tipo: 'texto', texto: await editarUltimoGasto(textoLimpo, telefone) };
   }
 
   // Caso padrão: tenta extrair um gasto da mensagem
@@ -65,7 +78,7 @@ async function registrarGasto(texto, usuario) {
   const extraido = await extrairGasto(texto);
 
   if (!extraido.sucesso) {
-    return `🤔 Não consegui identificar um gasto nessa mensagem.\n\n${extraido.motivo || ''}\n\nExemplo: _"mercado 50"_ ou digite *ajuda* para ver os comandos.`;
+    return { tipo: 'texto', texto: `🤔 Não consegui identificar um gasto nessa mensagem.\n\n${extraido.motivo || ''}\n\nExemplo: _"mercado 50"_ ou digite *ajuda* para ver os comandos.` };
   }
 
   await salvarGasto({
@@ -94,7 +107,8 @@ async function registrarGasto(texto, usuario) {
   }
 
   const local = extraido.estabelecimento ? ` (${extraido.estabelecimento})` : '';
-  return `✅ Registrado! ${formatarMoeda(extraido.valor)} em *${extraido.categoria}*${local} — ${formatarDataBR(extraido.data)}${avisoLimite}`;
+  const texto2 = `✅ Registrado! ${formatarMoeda(extraido.valor)} em *${extraido.categoria}*${local} — ${formatarDataBR(extraido.data)}${avisoLimite}`;
+  return { tipo: 'texto', texto: texto2 };
 }
 
 async function gerarResumoHoje(telefone) {
@@ -159,6 +173,42 @@ async function definirLimite(textoLower, telefone) {
   await definirLimiteUsuario(telefone, valor);
 
   return `✅ Limite mensal definido em ${formatarMoeda(valor)}`;
+}
+
+// Comando "relatorio" ou "relatorio MM/AAAA" — gera o PDF do mês informado
+// (ou do mês atual, se nenhum for especificado) e devolve para envio como documento.
+async function gerarRelatorioComando(textoLimpo, usuario) {
+  const telefone = usuario.telefone;
+  const hoje = new Date();
+
+  let ano = hoje.getFullYear();
+  let mes = hoje.getMonth() + 1;
+
+  const match = textoLimpo.match(/(\d{1,2})\/(\d{4})/);
+  if (match) {
+    mes = parseInt(match[1], 10);
+    ano = parseInt(match[2], 10);
+
+    if (mes < 1 || mes > 12) {
+      return { tipo: 'texto', texto: '🤔 Mês inválido. Use o formato: *relatorio 06/2026*' };
+    }
+  }
+
+  const gastos = await buscarGastosDoMes(telefone, ano, mes);
+
+  if (gastos.length === 0) {
+    return { tipo: 'texto', texto: `📄 Nenhum gasto encontrado para ${String(mes).padStart(2, '0')}/${ano}.` };
+  }
+
+  const pdfBuffer = await gerarRelatorioPDF({ usuario, gastos, ano, mes });
+  const nomeArquivo = `relatorio-${String(mes).padStart(2, '0')}-${ano}.pdf`;
+
+  return {
+    tipo: 'pdf',
+    texto: `📄 Relatório de ${String(mes).padStart(2, '0')}/${ano} gerado!`,
+    pdfBuffer,
+    nomeArquivo
+  };
 }
 
 async function editarUltimoGasto(texto, telefone) {
