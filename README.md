@@ -10,10 +10,12 @@ para ele. Só é atendido quem estiver cadastrado e ativo na tabela `usuarios` d
 Cada usuário tem seus próprios gastos e seu próprio limite mensal, totalmente isolados
 uns dos outros (pensado para, no futuro, vender acesso ao bot).
 
-Para autorizar um novo número, insira na tabela `usuarios`:
+Usuários marcados como `admin = true` podem liberar e revogar acesso de outros números
+diretamente pelo WhatsApp, sem precisar entrar no Supabase (veja "Comandos de admin" abaixo).
+
+Para tornar alguém admin (só pelo SQL Editor, por segurança):
 ```sql
-INSERT INTO usuarios (telefone, nome, limite_mensal)
-VALUES ('5511999999999', 'Nome da pessoa', 3000);
+UPDATE usuarios SET admin = true WHERE telefone = '5511999999999';
 ```
 
 ## Etapa 1, 2 e 3 (atual)
@@ -65,12 +67,21 @@ webhook, você vai precisar expor essa porta publicamente (veja seção Deploy).
 | Comando | O que faz |
 |---|---|
 | `mercado 50` | Registra um gasto (qualquer frase com valor + palavra-chave de categoria) |
-| `resumo hoje` | Mostra os gastos do dia |
-| `resumo mes` | Mostra os gastos do mês, por categoria, e o status do limite |
+| `resumo hoje` | Mostra os gastos do dia, com hora |
+| `resumo mes` | Mostra os gastos do mês, por categoria e detalhado, com data/hora |
+| `relatorio` | Gera o PDF do mês atual |
+| `relatorio 05/2026` | Gera o PDF de um mês específico |
 | `limite 3000` | Define o limite mensal |
 | `editar último categoria Saúde` | Corrige a categoria do último gasto |
 | `editar último valor 45,90` | Corrige o valor do último gasto |
 | `ajuda` | Lista os comandos |
+
+### Comandos de admin (restritos a usuários com `admin = true`)
+
+| Comando | O que faz |
+|---|---|
+| `liberar 5511999998888 Nome` | Autoriza um novo número a usar o bot |
+| `revogar 5511999998888` | Remove o acesso de um número (sem apagar o histórico de gastos) |
 
 ## Estrutura do projeto
 

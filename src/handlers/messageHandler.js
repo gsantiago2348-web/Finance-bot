@@ -14,7 +14,9 @@ import {
   buscarGastosDoMes,
   buscarUltimoGasto,
   editarGasto,
-  definirLimiteUsuario
+  definirLimiteUsuario,
+  criarOuReativarUsuario,
+  revogarUsuario
 } from '../services/supabaseService.js';
 import { formatarMoeda, formatarDataBR, formatarHora, somarGastos, agruparPorCategoria } from '../utils/formatadores.js';
 import { listarCategorias } from '../utils/categorias.js';
@@ -34,6 +36,10 @@ _"mercado 50"_ ou _"corte de cabelo 35"_
 ✏️ *editar último [campo] [valor]* — corrige o último gasto
 ❓ *ajuda* — mostra esta mensagem`;
 
+const MENSAGEM_AJUDA_ADMIN = `\n\n👑 *Comandos de admin:*
+➕ *liberar 5511999998888 Nome* — autoriza um novo número
+🚫 *revogar 5511999998888* — remove o acesso de um número`;
+
 // `usuario` é o registro vindo da tabela `usuarios` (já validado como autorizado e ativo).
 //
 // Retorna sempre um objeto { tipo, ... }:
@@ -46,7 +52,8 @@ export async function processarMensagem(texto, usuario) {
   const telefone = usuario.telefone;
 
   if (textoLower === 'ajuda' || textoLower === 'help') {
-    return { tipo: 'texto', texto: MENSAGEM_AJUDA };
+    const ajuda = usuario.admin ? MENSAGEM_AJUDA + MENSAGEM_AJUDA_ADMIN : MENSAGEM_AJUDA;
+    return { tipo: 'texto', texto: ajuda };
   }
 
   if (textoLower === 'resumo hoje') {
@@ -67,6 +74,14 @@ export async function processarMensagem(texto, usuario) {
 
   if (textoLower.startsWith('editar')) {
     return { tipo: 'texto', texto: await editarUltimoGasto(textoLimpo, telefone) };
+  }
+
+  if (textoLower.startsWith('liberar ')) {
+    return { tipo: 'texto', texto: await liberarUsuario(textoLimpo, usuario) };
+  }
+
+  if (textoLower.startsWith('revogar ')) {
+    return { tipo: 'texto', texto: await revogarAcessoUsuario(textoLimpo, usuario) };
   }
 
   // Caso padrão: tenta extrair um gasto da mensagem
@@ -241,4 +256,53 @@ async function editarUltimoGasto(texto, telefone) {
   }
 
   return '🤔 Use: *editar último categoria Saúde* ou *editar último valor 45,90*';
+}
+
+const MENSAGEM_SEM_PERMISSAO = '🚫 Esse comando é restrito a administradores.';
+
+// liberar 5511999998888 Nome da pessoa
+async function liberarUsuario(textoLimpo, usuarioSolicitante) {
+  if (!usuarioSolicitante.admin) {
+    return MENSAGEM_SEM_PERMISSAO;
+  }
+
+  const match = textoLimpo.match(/^liberar\s+(\d{10,15})\s*(.*)$/i);
+  if (!match) {
+    return '🤔 Use o formato: *liberar 5511999998888 Nome da pessoa*';
+  }
+
+  const telefoneNovo = match[1];
+  const nome = match[2].trim() || null;
+
+  const { usuario, jaExistia } = await criarOuReativarUsuario(telefoneNovo, nome);
+
+  if (jaExistia) {
+    return `✅ Acesso reativado para ${usuario.nome || telefoneNovo} (${telefoneNovo}).`;
+  }
+  return `✅ Número liberado! ${usuario.nome || telefoneNovo} (${telefoneNovo}) já pode usar o bot. Limite inicial: ${formatarMoeda(usuario.limite_mensal)}.`;
+}
+
+// revogar 5511999998888
+async function revogarAcessoUsuario(textoLimpo, usuarioSolicitante) {
+  if (!usuarioSolicitante.admin) {
+    return MENSAGEM_SEM_PERMISSAO;
+  }
+
+  const match = textoLimpo.match(/^revogar\s+(\d{10,15})\s*$/i);
+  if (!match) {
+    return '🤔 Use o formato: *revogar 5511999998888*';
+  }
+
+  const telefoneAlvo = match[1];
+
+  if (telefoneAlvo === usuarioSolicitante.telefone) {
+    return '🤔 Você não pode revogar o seu próprio acesso por aqui.';
+  }
+
+  const usuario = await revogarUsuario(telefoneAlvo);
+
+  if (!usuario) {
+    return `🤔 Número ${telefoneAlvo} não encontrado.`;
+  }
+  return `🚫 Acesso revogado para ${usuario.nome || telefoneAlvo} (${telefoneAlvo}).`;
 }

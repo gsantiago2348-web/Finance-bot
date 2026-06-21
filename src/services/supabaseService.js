@@ -132,6 +132,51 @@ export async function listarUsuariosAtivos() {
   return data;
 }
 
+// --- Administração (comandos liberar/revogar via WhatsApp) ---
+
+export async function criarOuReativarUsuario(telefone, nome) {
+  const existente = await supabase
+    .from('usuarios')
+    .select('*')
+    .eq('telefone', telefone)
+    .maybeSingle();
+
+  if (existente.error) throw existente.error;
+
+  if (existente.data) {
+    const { data, error } = await supabase
+      .from('usuarios')
+      .update({ ativo: true, nome: nome || existente.data.nome })
+      .eq('telefone', telefone)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return { usuario: data, jaExistia: true };
+  }
+
+  const { data, error } = await supabase
+    .from('usuarios')
+    .insert([{ telefone, nome, ativo: true, limite_mensal: 3000 }])
+    .select()
+    .single();
+
+  if (error) throw error;
+  return { usuario: data, jaExistia: false };
+}
+
+export async function revogarUsuario(telefone) {
+  const { data, error } = await supabase
+    .from('usuarios')
+    .update({ ativo: false })
+    .eq('telefone', telefone)
+    .select()
+    .maybeSingle();
+
+  if (error) throw error;
+  return data;
+}
+
 // --- Controle de envio automático mensal ---
 // Evita reenviar o mesmo relatório duas vezes (ex: se o cron rodar mais
 // de uma vez no mesmo dia por algum reinício do servidor).
