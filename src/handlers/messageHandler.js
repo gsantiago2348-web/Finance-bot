@@ -16,7 +16,7 @@ import {
   editarGasto,
   definirLimiteUsuario
 } from '../services/supabaseService.js';
-import { formatarMoeda, formatarDataBR, somarGastos, agruparPorCategoria } from '../utils/formatadores.js';
+import { formatarMoeda, formatarDataBR, formatarHora, somarGastos, agruparPorCategoria } from '../utils/formatadores.js';
 import { listarCategorias } from '../utils/categorias.js';
 
 const MENSAGEM_AJUDA = `🤖 *Comandos disponíveis:*
@@ -106,7 +106,9 @@ async function gerarResumoHoje(telefone) {
   }
 
   const total = somarGastos(gastos);
-  const linhas = gastos.map(g => `• ${formatarMoeda(g.valor)} — ${g.categoria}${g.estabelecimento ? ` (${g.estabelecimento})` : ''}`);
+  const linhas = [...gastos]
+    .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
+    .map(g => `${formatarHora(g.created_at)} — ${formatarMoeda(g.valor)} · ${g.categoria}${g.estabelecimento ? ` (${g.estabelecimento})` : ''}`);
 
   return `📊 *Resumo de hoje*\n\n${linhas.join('\n')}\n\n*Total: ${formatarMoeda(total)}*`;
 }
@@ -123,9 +125,17 @@ async function gerarResumoMes(usuario) {
   const total = somarGastos(gastos);
   const porCategoria = agruparPorCategoria(gastos);
 
-  const linhas = Object.entries(porCategoria)
+  const resumoCategorias = Object.entries(porCategoria)
     .sort((a, b) => b[1] - a[1])
     .map(([cat, valor]) => `• ${cat}: ${formatarMoeda(valor)}`);
+
+  // Lista detalhada, mais recente primeiro, com data e hora de cada gasto
+  const detalhado = [...gastos]
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    .map(g => {
+      const local = g.estabelecimento ? ` (${g.estabelecimento})` : '';
+      return `${formatarDataBR(g.data)} ${formatarHora(g.created_at)} — ${formatarMoeda(g.valor)} · ${g.categoria}${local}`;
+    });
 
   const limite = usuario.limite_mensal ? parseFloat(usuario.limite_mensal) : null;
   let linhaLimite = '';
@@ -136,7 +146,7 @@ async function gerarResumoMes(usuario) {
       : `\n\n🔴 Limite: ${formatarMoeda(limite)} — excedeu em ${formatarMoeda(Math.abs(restante))}`;
   }
 
-  return `📊 *Resumo do mês*\n\n${linhas.join('\n')}\n\n*Total: ${formatarMoeda(total)}*${linhaLimite}`;
+  return `📊 *Resumo do mês*\n\n*Por categoria:*\n${resumoCategorias.join('\n')}\n\n*Detalhado:*\n${detalhado.join('\n')}\n\n*Total: ${formatarMoeda(total)}*${linhaLimite}`;
 }
 
 async function definirLimite(textoLower, telefone) {
