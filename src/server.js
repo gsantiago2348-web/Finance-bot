@@ -2,16 +2,22 @@
 //
 // Ponto de entrada do sistema. Sobe um servidor Express que recebe
 // o webhook da Z-API toda vez que uma mensagem chega no WhatsApp.
+//
+// O número do WhatsApp conectado na Z-API é o "número do bot" — ele
+// pode receber mensagens de qualquer pessoa. Cada remetente só é
+// atendido se estiver cadastrado e ativo na tabela `usuarios`.
 
 import 'dotenv/config';
 import express from 'express';
 import { processarMensagem } from './handlers/messageHandler.js';
 import { enviarMensagem } from './services/zapService.js';
+import { buscarUsuario } from './services/supabaseService.js';
 
 const app = express();
 app.use(express.json());
 
-const MEU_NUMERO = process.env.MEU_NUMERO;
+const MENSAGEM_NAO_AUTORIZADO =
+  '🔒 Esse número ainda não tem acesso a este bot. Fale com quem te indicou para solicitar liberação.';
 
 app.get('/', (req, res) => {
   res.send('Finance Bot está no ar 🤖💰');
@@ -33,19 +39,23 @@ app.post('/webhook', async (req, res) => {
     const telefoneRemetente = corpo.phone;
     const texto = corpo.text.message;
 
-    // Filtro de segurança: só processa mensagens do seu próprio número,
-    // pra evitar que outras pessoas usem seu bot sem querer.
-    if (MEU_NUMERO && telefoneRemetente !== MEU_NUMERO) {
-      console.log(`Mensagem ignorada de número não autorizado: ${telefoneRemetente}`);
+    const usuario = await buscarUsuario(telefoneRemetente);
+
+    if (!usuario) {
+      console.log(`Mensagem recusada — número não cadastrado/ativo: ${telefoneRemetente}`);
+      await enviarMensagem(telefoneRemetente, MENSAGEM_NAO_AUTORIZADO);
       return;
     }
 
-    const resposta = await processarMensagem(texto, telefoneRemetente);
+    const resposta = await processarMensagem(texto, usuario);
     await enviarMensagem(telefoneRemetente, resposta);
   } catch (err) {
     console.error('Erro ao processar webhook:', err);
     try {
-      await enviarMensagem(MEU_NUMERO, '⚠️ Ocorreu um erro ao processar sua mensagem. Tente novamente.');
+      const telefoneRemetente = req.body?.phone;
+      if (telefoneRemetente) {
+        await enviarMensagem(telefoneRemetente, '⚠️ Ocorreu um erro ao processar sua mensagem. Tente novamente.');
+      }
     } catch (_) {
       // Se nem o aviso de erro conseguir enviar, só loga e segue.
     }

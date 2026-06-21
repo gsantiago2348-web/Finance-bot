@@ -3,11 +3,24 @@
 Bot que recebe mensagens no WhatsApp, extrai dados de gastos (valor, categoria, data) e
 guarda no Supabase. No fim do mês, gera um relatório.
 
+## Arquitetura multi-usuário
+
+O número conectado na Z-API é o "número do bot" — qualquer pessoa pode mandar mensagem
+para ele. Só é atendido quem estiver cadastrado e ativo na tabela `usuarios` do Supabase.
+Cada usuário tem seus próprios gastos e seu próprio limite mensal, totalmente isolados
+uns dos outros (pensado para, no futuro, vender acesso ao bot).
+
+Para autorizar um novo número, insira na tabela `usuarios`:
+```sql
+INSERT INTO usuarios (telefone, nome, limite_mensal)
+VALUES ('5511999999999', 'Nome da pessoa', 3000);
+```
+
 ## Etapa 1 (atual)
 
 - ✅ Webhook recebendo mensagens da Z-API
 - ✅ Extração por regex (gratuita) — já preparada para trocar por IA depois
-- ✅ Salvamento no Supabase
+- ✅ Multi-usuário com isolamento de dados por telefone
 - ✅ Comandos: `resumo hoje`, `resumo mes`, `limite 3000`, `editar último...`, `ajuda`
 - ⏳ Relatório PDF mensal (próxima etapa)
 
@@ -34,7 +47,7 @@ webhook, você vai precisar expor essa porta publicamente (veja seção Deploy).
 | `SUPABASE_URL` | URL do projeto Supabase |
 | `SUPABASE_ANON_KEY` | Chave pública (anon) do Supabase |
 | `ANTHROPIC_API_KEY` | Só necessário se `MODO_EXTRACAO=ia` |
-| `MEU_NUMERO` | Seu número no formato `5511999999999` — filtro de segurança |
+
 
 ## Como trocar de regex para IA no futuro
 

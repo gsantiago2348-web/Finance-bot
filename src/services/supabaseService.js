@@ -20,7 +20,7 @@ export async function salvarGasto({ valor, categoria, data, estabelecimento, men
   return row;
 }
 
-export async function buscarGastosDoMes(ano, mes) {
+export async function buscarGastosDoMes(telefone, ano, mes) {
   const inicio = `${ano}-${String(mes).padStart(2, '0')}-01`;
   const proximoMes = mes === 12 ? 1 : mes + 1;
   const anoProximo = mes === 12 ? ano + 1 : ano;
@@ -29,6 +29,7 @@ export async function buscarGastosDoMes(ano, mes) {
   const { data, error } = await supabase
     .from('gastos')
     .select('*')
+    .eq('telefone', telefone)
     .gte('data', inicio)
     .lt('data', fim)
     .order('data', { ascending: true });
@@ -37,20 +38,22 @@ export async function buscarGastosDoMes(ano, mes) {
   return data;
 }
 
-export async function buscarGastosDoDia(dataISO) {
+export async function buscarGastosDoDia(telefone, dataISO) {
   const { data, error } = await supabase
     .from('gastos')
     .select('*')
+    .eq('telefone', telefone)
     .eq('data', dataISO);
 
   if (error) throw error;
   return data;
 }
 
-export async function buscarUltimoGasto() {
+export async function buscarUltimoGasto(telefone) {
   const { data, error } = await supabase
     .from('gastos')
     .select('*')
+    .eq('telefone', telefone)
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -86,6 +89,32 @@ export async function setConfig(chave, valor) {
   const { data, error } = await supabase
     .from('config')
     .upsert({ chave, valor, updated_at: new Date().toISOString() })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+// --- Multi-usuário ---
+
+export async function buscarUsuario(telefone) {
+  const { data, error } = await supabase
+    .from('usuarios')
+    .select('*')
+    .eq('telefone', telefone)
+    .eq('ativo', true)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function definirLimiteUsuario(telefone, limite) {
+  const { data, error } = await supabase
+    .from('usuarios')
+    .update({ limite_mensal: limite })
+    .eq('telefone', telefone)
     .select()
     .single();
 
