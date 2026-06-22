@@ -4,17 +4,21 @@
 
 const BASE_URL = `https://api.z-api.io/instances/${process.env.ZAPI_INSTANCE_ID}/token/${process.env.ZAPI_TOKEN}`;
 
+// Monta os headers da requisição — inclui o Client-Token apenas se estiver configurado.
+// Quando vazio, a Z-API rejeita a chamada com "your client-token is not configured".
+function montarHeaders() {
+  const headers = { 'Content-Type': 'application/json' };
+  if (process.env.ZAPI_CLIENT_TOKEN) {
+    headers['Client-Token'] = process.env.ZAPI_CLIENT_TOKEN;
+  }
+  return headers;
+}
+
 export async function enviarMensagem(telefone, mensagem) {
   const response = await fetch(`${BASE_URL}/send-text`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Client-Token': process.env.ZAPI_CLIENT_TOKEN || ''
-    },
-    body: JSON.stringify({
-      phone: telefone,
-      message: mensagem
-    })
+    headers: montarHeaders(),
+    body: JSON.stringify({ phone: telefone, message: mensagem })
   });
 
   if (!response.ok) {
@@ -27,20 +31,15 @@ export async function enviarMensagem(telefone, mensagem) {
 }
 
 // Envia um arquivo PDF como documento no WhatsApp.
-// `pdfBuffer` é o conteúdo binário do PDF, `nomeArquivo` aparece no chat.
 export async function enviarDocumentoPDF(telefone, pdfBuffer, nomeArquivo) {
   const base64 = pdfBuffer.toString('base64');
-  const documentoBase64 = `data:application/pdf;base64,${base64}`;
 
   const response = await fetch(`${BASE_URL}/send-document/pdf`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Client-Token': process.env.ZAPI_CLIENT_TOKEN || ''
-    },
+    headers: montarHeaders(),
     body: JSON.stringify({
       phone: telefone,
-      document: documentoBase64,
+      document: `data:application/pdf;base64,${base64}`,
       fileName: nomeArquivo
     })
   });
